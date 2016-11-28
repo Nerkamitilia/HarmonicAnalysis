@@ -42,6 +42,18 @@ def filterQuartets(quartet_list, composer_id):
                         other_quartets[quartet_id] = quartet
     return composed_quartets, other_quartets
 
+def trimTitle(child_title, parent_title):
+    tmp_child_title = child_title
+    if parent_title in child_title:
+        # Remove the name of the quartet from a movement's title
+        tmp_child_title = tmp_child_title.replace(parent_title, '')
+        # Remove blank spaces at the beginning
+        tmp_child_title = tmp_child_title.split(' ', 1)
+        if tmp_child_title[0] != ':':
+            print 'Strange name in {} from {}'.format(child_title, parent_title)
+        tmp_child_title = tmp_child_title[1]
+    return tmp_child_title
+
 def fillQuartetInformation(composed_quartets):
     quartet_count = len(composed_quartets)
     full_quartet_dict = dict()
@@ -71,6 +83,8 @@ def fillQuartetInformation(composed_quartets):
                             full_quartet_dict[parent_id] = dict()
                             full_quartet_dict[parent_id]['title'] = parent_title
                             full_quartet_dict[parent_id]['part-list'] = {}
+                        # Trim the title of the child if necessary
+                        curr_node['title'] = trimTitle(curr_node['title'], parent_title)
                         full_quartet_dict[parent_id]['part-list'][work_id] = curr_node
                     else:
                         if work_id not in full_quartet_dict:
@@ -78,7 +92,7 @@ def fillQuartetInformation(composed_quartets):
                             full_quartet_dict[work_id] = curr_node
                             curr_node['part-list'] = {}
                         child_id = related_work_id
-                        child_title = related_work_title
+                        child_title = trimTitle(related_work_title, curr_node['title'])
                         curr_node['part-list'][child_id] = {'title': child_title, 'part-parent':work_id}
     # Filtering non-root works, e.g., (Op.53 No.1, Op.53 No.2, Op.53 No.3  ---> All contained within Op.53)
     full_quartet_dict = { work_id: full_quartet_dict[work_id] for work_id in full_quartet_dict if 'part-parent' not in full_quartet_dict[work_id]}
