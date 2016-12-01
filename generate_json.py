@@ -153,7 +153,10 @@ def filterQuartets(quartet_list, composer_id):
     composed_quartets = {}
     other_quartets = {}
     for quartet in quartet_list:
+        # Ignore all the quartets that are not in the manually parsed list by Rafael Caro
         quartet_id = quartet['id']
+        if quartet_id not in manual_quartet_lists[composer_id]:
+            continue
         if quartet['type'] == 'Quartet':
             for artist in quartet['artist-relation-list']:
                 if artist['type'] == 'composer':
@@ -163,7 +166,40 @@ def filterQuartets(quartet_list, composer_id):
                         other_quartets[quartet_id] = quartet
     return composed_quartets, other_quartets
 
-def trimTitle(child_title, parent_title):
+def parseQuartetTitle(quartet_title):
+    catalog_information = {}
+    title_tokens = quartet_title.lower().split()
+    # Checking for Op. XX No. XX entries
+    if 'op.' in title_tokens:
+        op_i = title_tokens.index('op.')
+        opus = title_tokens[op_i + 1]
+        catalog_information['opus_number'] = [opus]
+        # I am sure there is a better way to check this...
+        if (op_i + 1) < (len(title_tokens) - 1):
+            if 'no.' == title_tokens[op_i + 2]:
+                number = title_tokens[op_i + 3].replace(',', '')
+                catalog_information['opus_number'].append(number)
+    # Checking for K. entries
+    if 'k.' in title_tokens:
+        k_i = title_tokens.index('k.')
+        koechel = title_tokens[k_i + 1]
+        koechel = koechel.split('/')
+        if len(koechel) == 2:
+            catalog_information['koechel'] = [koechel[0], koechel[1]]
+        else:
+            catalog_information['koechel'] = [koechel[0]]
+    # Checking for Hob. entries
+    if 'hob.' in title_tokens:
+        hob_i = title_tokens.index('hob.')
+        hoboken = title_tokens[hob_i + 1]
+        hoboken = hoboken.split(':')
+        if len(hoboken) != 2:
+            print 'Error in hoboken catalog string in\n{}'.format(quartet_title)
+        else:
+            catalog_information['hoboken'] = [hoboken[0], hoboken[1]]
+    return catalog_information
+
+def parsePartTitle(child_title, parent_title):
     tmp_child_title = child_title
     if parent_title in child_title:
         # Remove the name of the quartet from a movement's title
@@ -173,7 +209,13 @@ def trimTitle(child_title, parent_title):
         if tmp_child_title[0] != ':':
             print 'Strange name in {} from {}'.format(child_title, parent_title)
         tmp_child_title = tmp_child_title[1]
-    return tmp_child_title
+    part_roman_number = tmp_child_title.split('.', 1)[0]
+    try:
+        part_arabic_number = roman.fromRoman(part_roman_number)
+    except roman.InvalidRomanNumeralError:
+        part_arabic_number = 99
+        print 'Strange name in {} from {}'.format(child_title, parent_title)
+    return tmp_child_title, part_arabic_number
 
 def fillQuartetInformation(composer_id, composed_quartets):
     quartet_count = len(composed_quartets)
@@ -182,44 +224,28 @@ def fillQuartetInformation(composer_id, composed_quartets):
     for idx,work_id in enumerate(composed_quartets):
         print '\tFetching quartet information...({}/{})'.format(idx+1,quartet_count)
         work_info = musicbrainzngs.get_work_by_id(work_id, includes=['work-rels'])['work']
-        # Parts could have made an entry of this work already
-        if work_id in full_quartet_dict:
-            curr_node = full_quartet_dict[work_id]
-        # New work that has not been parsed before
-        else:
-            curr_node = {'title':work_info['title']}
+        curr_node = {'title':work_info['title']}
         # Fill quartet number from the manually-checked list
-        if work_id in manual_quartet_lists[composer_id]:
-            curr_node['quartet_number'] = manual_quartet_lists[composer_id].index(work_id) + 1
+        curr_node['quartet_number'] = manual_quartet_lists[composer_id].index(work_id) + 1
+        # Parse Opus|Koechel|Hoboken information
+        curr_node['catalog_info'] = parseQuartetTitle(curr_node['title'])
         # Filtering garbage mbid entries, like this: 30d4080a-d195-3f03-88e3-585aae505398
         if 'work-relation-list' in work_info:
             for related_work in work_info['work-relation-list']:
                 related_work_id = related_work['work']['id']
                 related_work_title = related_work['work']['title']
                 if related_work['type'] == 'parts':
-                    # Detecting a parent work for this node
+                    # Ignoring a parent node for this work
                     if 'direction' in related_work and related_work['direction'] == 'backward':
-                        parent_id = related_work_id
-                        parent_title = related_work['work']['title']
-                        curr_node['part-parent'] = parent_id
-                        if parent_id not in full_quartet_dict:
-                            # This child will instantiate the parent
-                            full_quartet_dict[parent_id] = dict()
-                            full_quartet_dict[parent_id]['title'] = parent_title
-                            full_quartet_dict[parent_id]['part-list'] = {}
-                        # Trim the title of the child if necessary
-                        curr_node['title'] = trimTitle(curr_node['title'], parent_title)
-                        full_quartet_dict[parent_id]['part-list'][work_id] = curr_node
+                        continue
                     else:
                         if work_id not in full_quartet_dict:
                             # This parent will instantiate itself in the dictionary
                             full_quartet_dict[work_id] = curr_node
                             curr_node['part-list'] = {}
                         child_id = related_work_id
-                        child_title,  = parseTitle(related_work_title, curr_node['title'])
-                        curr_node['part-list'][child_id] = {'title': child_title, 'part-parent':work_id}
-    # Filtering non-root works, e.g., (Op.53 No.1, Op.53 No.2, Op.53 No.3  ---> All contained within Op.53)
-    full_quartet_dict = { work_id: full_quartet_dict[work_id] for work_id in full_quartet_dict if 'part-parent' not in full_quartet_dict[work_id]}
+                        child_title, part_number = parsePartTitle(related_work_title, curr_node['title'])
+                        curr_node['part-list'][child_id] = {'title': child_title, 'part-parent':work_id, 'part-number': part_number}
     return full_quartet_dict
 
 def generateJson(output_file):
