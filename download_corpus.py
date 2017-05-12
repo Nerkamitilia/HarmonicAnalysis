@@ -17,6 +17,7 @@ import json
 import common
 import os
 import string
+import argparse
 
 ks_url = 'http://kern.humdrum.org/'
 ks_corpus_folder = 'cgi-bin/ksdata'
@@ -146,4 +147,9 @@ def downloadCorpus(json_file, out_dir, mbids=False):
     return
 
 if __name__ == "__main__":
-    downloadCorpus('./out.json', 'corpus', False)
+    parser = argparse.ArgumentParser(description='Download the corpus from KernScores.')
+    parser.add_argument('input_json', metavar='JSON_FILE', help='The json file containing all the metadata')
+    parser.add_argument('--output_dir', metavar='DIRECTORY', default='corpus', help='The output directory where the files are going to be stored')
+    parser.add_argument('--mbids', action='store_const', const=True, default=False, help='Organize the folders per MBIDs')
+    args = parser.parse_args()
+    downloadCorpus(args.input_json, args.output_dir, args.mbids)
