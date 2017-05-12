@@ -92,7 +92,7 @@ def genKernFilename(composer_id, quartet_info, mvmt_id):
         rstr = genMozartKernFilename(quartet_info, mvmt_id)
     return rstr
 
-def downloadCorpus(json_file, out_dir, mbids=False):
+def downloadCorpus(json_file, out_dir, mbids=False, tsroot=None):
     quartet_dict = readDict(json_file)
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
@@ -131,6 +131,8 @@ def downloadCorpus(json_file, out_dir, mbids=False):
                 krn_file = urllib2.urlopen(query_url).read()
                 if krn_file == '':
                     print 'Failed, {}'.format(query_url)
+                    if os.path.exists(mvmt_dir):
+                        os.rmdir(mvmt_dir)
                     continue
                 if os.path.exists(mvmt_dir):
                     output_file = os.path.join(mvmt_dir, krn_name)
@@ -150,6 +152,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Download the corpus from KernScores.')
     parser.add_argument('input_json', metavar='JSON_FILE', help='The json file containing all the metadata')
     parser.add_argument('--output_dir', metavar='DIRECTORY', default='corpus', help='The output directory where the files are going to be stored')
+    parser.add_argument('--tsroot', metavar='TSROOT_ADDRESS', help='Provide an address to the tsroot binary to compute harmonic analysis')
     parser.add_argument('--mbids', action='store_const', const=True, default=False, help='Organize the folders per MBIDs')
     args = parser.parse_args()
-    downloadCorpus(args.input_json, args.output_dir, args.mbids)
+    downloadCorpus(args.input_json, args.output_dir, args.mbids, args.tsroot)
