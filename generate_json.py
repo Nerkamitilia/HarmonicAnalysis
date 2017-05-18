@@ -15,7 +15,7 @@ import roman
 import common
 
 # Main dictionary
-string_quartets = {common.haydn_mbid:{},
+string_quartets = {common.haydn_mbid:{}}
                    #common.mozart_mbid:{},
                    #common.beethoven_mbid:{}}
 
