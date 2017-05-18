@@ -16,13 +16,13 @@ import common
 
 # Main dictionary
 string_quartets = {common.haydn_mbid:{},
-                   common.mozart_mbid:{},
-                   common.beethoven_mbid:{}}
+                   #common.mozart_mbid:{},
+                   #common.beethoven_mbid:{}}
 
 musicbrainzngs.set_useragent(
     "harmonic analysis of string quartets",
     "0.1",
-    "https://github.com/nerkamitilia/HarmonicAnalysis"
+    "https://github.com/napulen/HarmonicAnalysis"
 )
 
 def filterQuartets(quartet_list, composer_id):
