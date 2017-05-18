@@ -18,6 +18,12 @@ import common
 import os
 import string
 import argparse
+from subprocess import call
+
+local_url = None
+local_location_beethoven = 'beethoven/quartets/kern'
+local_location_haydn = 'haydn/quartets/kern'
+local_location_mozart = 'mozart/quartets/kern'
 
 ks_url = 'http://kern.humdrum.org/'
 ks_corpus_folder = 'cgi-bin/ksdata'
@@ -25,15 +31,27 @@ ks_location_beethoven = 'users/craig/classical/beethoven/quartet'
 ks_location_haydn = 'musedata/haydn/quartet'
 ks_location_mozart = 'musedata/mozart/quartet'
 
-# Location of the quartets in the server
-location_dict = {
-common.haydn_mbid: ks_location_haydn,
-common.beethoven_mbid: ks_location_beethoven,
-common.mozart_mbid: ks_location_mozart
+# Location of the quartets in the local repository
+local_location_dict = {
+    common.haydn_mbid: local_location_haydn,
+    common.beethoven_mbid: local_location_beethoven,
+    common.mozart_mbid: local_location_mozart
 }
 
+# Location of the quartets in the server
+ks_location_dict = {
+    common.haydn_mbid: ks_location_haydn,
+    common.beethoven_mbid: ks_location_beethoven,
+    common.mozart_mbid: ks_location_mozart
+}
+
+def genLocalUrl(composer_id, filestring):
+    composer_location = local_location_dict[composer_id]
+    folder = os.path.join(local_url, composer_location)
+    return os.path.join(folder, filestring)
+
 def genQueryUrl(composer_id, filestring, formt='kern'):
-    composer_location = location_dict[composer_id]
+    composer_location = ks_location_dict[composer_id]
     return '{}{}?l={}&file={}&f={}'.format(ks_url, ks_corpus_folder, composer_location, filestring, formt)
 
 def readDict(json_file):
@@ -92,7 +110,9 @@ def genKernFilename(composer_id, quartet_info, mvmt_id):
         rstr = genMozartKernFilename(quartet_info, mvmt_id)
     return rstr
 
-def downloadCorpus(json_file, out_dir, mbids=False, tsroot=None):
+def downloadCorpus(json_file, out_dir, mbids=False, localcorpus=None, tsroot=None):
+    global local_url
+    local_url = localcorpus
     quartet_dict = readDict(json_file)
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
@@ -127,10 +147,18 @@ def downloadCorpus(json_file, out_dir, mbids=False, tsroot=None):
                 krn_name = genKernFilename(composer_id, quartet_info, mvmt_id)
                 if krn_name == '':
                     continue
-                query_url = genQueryUrl(composer_id, krn_name)
-                krn_file = urllib2.urlopen(query_url).read()
+                if not local_url:
+                    query_url = genQueryUrl(composer_id, krn_name)
+                    krn_file = urllib2.urlopen(query_url).read()
+                else:
+                    query_url = genLocalUrl(composer_id, krn_name)
+                    if os.path.exists(query_url):
+                        fd = open(query_url)
+                        krn_file = fd.read()
+                    else:
+                        krn_file = ''                    
                 if krn_file == '':
-                    print 'Failed, {}'.format(query_url)
+                    print 'Failed to retreive {} from {}'.format(krn_name, query_url)
                     if os.path.exists(mvmt_dir):
                         os.rmdir(mvmt_dir)
                     continue
@@ -142,10 +170,16 @@ def downloadCorpus(json_file, out_dir, mbids=False, tsroot=None):
                             f.write(krn_file)
                             f.close()
                             print 'Success, {}'.format(query_url)
+                            if tsroot:
+                                with open('{}_tsroot.krn'.format(output_file), "w") as tsroot_out:
+                                    call([tsroot, "-rp", output_file], stdout=tsroot_out)
                         except IOError:
                             print 'IOError, {}'.format(output_file)
                     else:
-                        print 'Skip, {}'.format(query_url)
+                        print 'Skip, {}'.format(query_url)            
+            if not os.listdir(quartet_dir):
+                print 'Removing empty folder {}'.format(quartet_dir)
+                os.rmdir(quartet_dir)
     return
 
 if __name__ == "__main__":
@@ -153,6 +187,7 @@ if __name__ == "__main__":
     parser.add_argument('input_json', metavar='JSON_FILE', help='The json file containing all the metadata')
     parser.add_argument('--output_dir', metavar='DIRECTORY', default='corpus', help='The output directory where the files are going to be stored')
     parser.add_argument('--tsroot', metavar='TSROOT_ADDRESS', help='Provide an address to the tsroot binary to compute harmonic analysis')
+    parser.add_argument('--localcorpus', metavar='LOCAL_CORPUS', help='Attempt to download the files locally' )
     parser.add_argument('--mbids', action='store_const', const=True, default=False, help='Organize the folders per MBIDs')
     args = parser.parse_args()
-    downloadCorpus(args.input_json, args.output_dir, args.mbids, args.tsroot)
+    downloadCorpus(args.input_json, args.output_dir, args.mbids, args.localcorpus, args.tsroot)
