@@ -19,6 +19,7 @@ import os
 import string
 import argparse
 from subprocess import call
+import logging
 
 local_url = None
 local_location_beethoven = 'beethoven/quartets/kern'
@@ -68,7 +69,7 @@ def stripQuartetTitle(title):
     if mode_i != -1:
         tonality = title[:mode_i].split()[-1]
         rstr = '{} {}'.format(tonality, title[mode_i:])
-    return rstr.replace(':','-').replace('"','')
+    return rstr.replace(':','-').replace('"','').decode('cp437')
 
 def stripMvmtTitle(title):
     maxchars = 64
@@ -111,20 +112,25 @@ def genKernFilename(composer_id, quartet_info, mvmt_id):
     return rstr
 
 def downloadCorpus(json_file, out_dir, mbids=False, localcorpus=None, tsroot=None):
+    logging.basicConfig(filename='log',level=logging.INFO, format='%(levelname)s(%(asctime)s):\t%(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
+    logging.info("Starting the corpus download!")
     global local_url
     local_url = localcorpus
     quartet_dict = readDict(json_file)
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
     for composer_id, composer_info in quartet_dict.iteritems():
-        # Creating directory for this composer
+        # Creating directory for this composer        
         if mbids:
             composer_dir = composer_id
         else:
             composer_dir = composer_info['sort-name']
         composer_dir = os.path.join(out_dir, composer_dir)
         if not os.path.exists(composer_dir):
+            logging.info('Creating directory {}'.format(composer_dir))
             os.makedirs(composer_dir)
+        else:
+            logging.info('{} directory already exists'.format(composer_dir))
         for quartet_id, quartet_info in composer_info['quartet-list'].iteritems():
             # Creating directory for this quartet
             if mbids:
@@ -134,7 +140,10 @@ def downloadCorpus(json_file, out_dir, mbids=False, localcorpus=None, tsroot=Non
                 quartet_dir = '{:02d} - {}'.format(quartet_info['quartet-number'], quartet_title)
             quartet_dir = os.path.join(composer_dir, quartet_dir)
             if not os.path.exists(quartet_dir):
+                logging.info('Creating directory {}'.format(quartet_dir))
                 os.makedirs(quartet_dir)
+            else:
+                logging.info('{} directory already exists'.format(quartet_dir))
             for mvmt_id, mvmt_info in quartet_info['part-list'].iteritems():
                 # Creating directory for this quartet
                 if mbids:
@@ -143,22 +152,31 @@ def downloadCorpus(json_file, out_dir, mbids=False, localcorpus=None, tsroot=Non
                     mvmt_dir = stripMvmtTitle(mvmt_info['title'])
                 mvmt_dir = os.path.join(quartet_dir, mvmt_dir)
                 if not os.path.exists(mvmt_dir):
+                    logging.info('Creating directory {}'.format(mvmt_dir))
                     os.makedirs(mvmt_dir)
+                else:
+                    logging.info('{} directory already exists'.format(mvmt_dir))
                 krn_name = genKernFilename(composer_id, quartet_info, mvmt_id)
                 if krn_name == '':
                     continue
-                if not local_url:
-                    query_url = genQueryUrl(composer_id, krn_name)
-                    krn_file = urllib2.urlopen(query_url).read()
-                else:
+                if local_url:
+                    logging.info('Retreiving {} from local corpus'.format(krn_name))
                     query_url = genLocalUrl(composer_id, krn_name)
                     if os.path.exists(query_url):
                         fd = open(query_url)
                         krn_file = fd.read()
                     else:
-                        krn_file = ''                    
+                        query_url = genQueryUrl(composer_id, krn_name)
+                        logging.info('Failed. Fetching online:')
+                        logging.info(query_url) 
+                        krn_file = urllib2.urlopen(query_url).read() 
+                else:                    
+                    query_url = genQueryUrl(composer_id, krn_name)
+                    logging.info('No local corpus provided. Fetching online:')
+                    logging.info(query_url)
+                    krn_file = urllib2.urlopen(query_url).read()                    
                 if krn_file == '':
-                    print 'Failed to retreive {} from {}'.format(krn_name, query_url)
+                    logging.warning('{} not found'.format(krn_name))
                     if os.path.exists(mvmt_dir):
                         os.rmdir(mvmt_dir)
                     continue
@@ -169,16 +187,20 @@ def downloadCorpus(json_file, out_dir, mbids=False, localcorpus=None, tsroot=Non
                             f = open(output_file, "w")
                             f.write(krn_file)
                             f.close()
-                            print 'Success, {}'.format(query_url)
+                            logging.info('{} written'.format(krn_name))
+                            #print 'Success, {}'.format(query_url)
                             if tsroot:
+                                logging.info('Attempting tsroot harmonic analysis')
                                 with open('{}_tsroot.krn'.format(output_file), "w") as tsroot_out:
                                     call([tsroot, "-rp", output_file], stdout=tsroot_out)
                         except IOError:
                             print 'IOError, {}'.format(output_file)
                     else:
-                        print 'Skip, {}'.format(query_url)            
+                        logging.warning('{} already exists'.format(output_file))
+                        #print 'Skip, {}'.format(query_url)            
             if not os.listdir(quartet_dir):
-                print 'Removing empty folder {}'.format(quartet_dir)
+                logging.info('Removing empty folder {}'.format(quartet_dir))
+                #print 'Removing empty folder {}'.format(quartet_dir)
                 os.rmdir(quartet_dir)
     return
 
