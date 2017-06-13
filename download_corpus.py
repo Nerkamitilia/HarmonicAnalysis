@@ -21,6 +21,10 @@ import argparse
 from subprocess import call
 import logging
 
+meldir = '~/bin/melisma_scripts/bin'
+midir = '~/bin/melisma_scripts/bin'
+
+
 local_url = None
 local_location_beethoven = 'beethoven/quartets/kern'
 local_location_haydn = 'haydn/quartets/kern'
@@ -191,8 +195,8 @@ def downloadCorpus(json_file, out_dir, mbids=False, localcorpus=None, tsroot=Non
                             #print 'Success, {}'.format(query_url)
                             if tsroot:
                                 logging.info('Attempting tsroot harmonic analysis')
-                                with open('{}_tsroot.krn'.format(output_file), "w") as tsroot_out:
-                                    call([tsroot, "-rp", output_file], stdout=tsroot_out)
+                                with open('{}_tsroot.krn'.format(output_file[:-4]), "w") as tsroot_out:
+                                    call([tsroot, "-rp", "--meldir", meldir, "--midir", midir, output_file], stdout=tsroot_out)
                         except IOError:
                             print 'IOError, {}'.format(output_file)
                     else:
@@ -202,6 +206,7 @@ def downloadCorpus(json_file, out_dir, mbids=False, localcorpus=None, tsroot=Non
                 logging.info('Removing empty folder {}'.format(quartet_dir))
                 #print 'Removing empty folder {}'.format(quartet_dir)
                 os.rmdir(quartet_dir)
+            logging.info('Finished!')
     return
 
 if __name__ == "__main__":
